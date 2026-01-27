@@ -1,0 +1,57 @@
+# configs/dataset.yaml
+
+data_root: data/raw
+processed_root: data/processed
+splits_root: data/splits
+stats_root: data/stats
+
+datasets:
+  bd11:
+    url: "https://drive.google.com/uc?id=XXXX"
+    zip_name: "bd11.zip"
+
+  bfs46:
+    url: "https://drive.google.com/uc?id=XXXX"
+    zip_name: "bfs46.zip"
+
+  pca11:
+    url: "https://drive.google.com/uc?id=XXXX"
+    zip_name: "pca11.zip"
+
+  wrd21:
+    url: "https://drive.google.com/uc?id=XXXX"
+    zip_name: "wrd21.zip"
+
+  vn26:
+    url: "https://drive.google.com/uc?id=XXXX"
+    zip_name: "vn26.zip"
+
+  vn99:
+    url: "https://drive.google.com/uc?id=XXXX"
+    zip_name: "vn99.zip"
+
+
+image_extensions: [".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"]
+
+split:
+  train_ratio: 0.7
+  min_images_for_clustering: 10
+  min_test_ratio_from_cluster: 0.25
+
+
+clustering:
+  feature_extractor: convnextv2_tiny.fcmae_ft_in22k_in1k_384
+  batch_size: 64
+  distance_threshold: 0.1
+  metric: cosine
+  linkage: average
+
+
+vn26:
+  magnifications: ["10x", "20x", "50x"]
+  flatten: true
+
+
+seed: 42
+device: auto
+num_workers: auto

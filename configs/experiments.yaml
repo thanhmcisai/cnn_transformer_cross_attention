@@ -1,0 +1,220 @@
+# configs/experiments.yaml
+
+datasets:
+  - bd11
+  - bfs46
+  - pca11
+  - wrd21
+  - vn26
+  - vn99
+
+
+global_train:
+  epochs: 100
+  early_stop: 5
+  warmup_epochs: 3
+  optimizer: adamw
+  scheduler: cosine
+  precision: amp
+  seed: 42
+
+
+models:
+
+  # ===== BASELINE MODELS =====
+
+  convnextv2_tiny:
+    type: baseline
+    backbone: convnextv2_tiny
+    batch_size: 64
+    lr: 5e-4
+
+  efficientnet_b0:
+    type: baseline
+    backbone: efficientnet_b0
+    batch_size: 128
+    lr: 3e-4
+
+  coatnet_0_rw_224:
+    type: baseline
+    backbone: coatnet_0_rw_224
+    batch_size: 64
+    lr: 4e-4
+
+  swinv2_tiny_window8_256:
+    type: baseline
+    backbone: swinv2_tiny_window8_256
+    batch_size: 64
+    lr: 3e-4
+
+  swinv2_base_window16_256:
+    type: baseline
+    backbone: swinv2_base_window16_256
+    batch_size: 32
+    lr: 2e-4
+
+  densenet121:
+    type: baseline
+    backbone: densenet121
+    batch_size: 128
+    lr: 4e-4
+
+
+  # ===== ABLATION / PROPOSED MODELS =====
+
+  A1:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    batch_size: 64
+    lr: 5e-4
+
+  A2:
+    type: proposed
+    global_backbone: swinv2_tiny_window8_256
+    batch_size: 64
+    lr: 3e-4
+
+  A3:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    embed_dim: 64
+    nhead: 2
+    depth: 1
+    batch_size: 64
+    lr: 5e-4
+
+  A4:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    embed_dim: 64
+    nhead: 2
+    depth: 1
+    batch_size: 64
+    lr: 5e-4
+
+  A5:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    global_backbone: swinv2_tiny_window8_256
+    batch_size: 64
+    lr: 4e-4
+
+  A6:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    global_backbone: swinv2_tiny_window8_256
+    embed_dim: 128
+    num_heads: 4
+    batch_size: 64
+    lr: 3e-4
+
+  A7:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    global_backbone: swinv2_tiny_window8_256
+    embed_dim: 128
+    num_heads: 4
+    hidden_dim: 256
+    batch_size: 64
+    lr: 3e-4
+
+
+weights:
+  root_dir: "pretrained_weights"
+  mapping:
+    bd11:
+      convnextv2_tiny: "bd11/convnextv2_tiny.pth"
+      swinv2_tiny_window8_256: "bd11/swinv2_tiny.pth"
+      swinv2_base_window16_256: "bd11/swinv2_base.pth"
+      coatnet_0_rw_224: "bd11/coatnet_0.pth"
+      efficientnet_b0: "bd11/efficientnet_b0.pth"
+      densenet121: "bd11/densenet121.pth"
+
+      A1: "bd11/A1_local_only.pth"
+      A2: "bd11/A2_global_only.pth"
+      A3: "bd11/A3_seq_concat.pth"
+      A4: "bd11/A4_seq_local_to_global.pth"
+      A5: "bd11/A5_dual_concat.pth"
+      A6: "bd11/A6_dual_crossattn.pth"
+      A7: "bd11/A7_proposed.pth"
+
+    bfs46:
+      convnextv2_tiny: "bfs46/convnextv2_tiny.pth"
+      swinv2_tiny_window8_256: "bfs46/swinv2_tiny.pth"
+      swinv2_base_window16_256: "bfs46/swinv2_base.pth"
+      coatnet_0_rw_224: "bfs46/coatnet_0.pth"
+      efficientnet_b0: "bfs46/efficientnet_b0.pth"
+      densenet121: "bfs46/densenet121.pth"
+
+      A1: "bfs46/A1_local_only.pth"
+      A2: "bfs46/A2_global_only.pth"
+      A3: "bfs46/A3_seq_concat.pth"
+      A4: "bfs46/A4_seq_local_to_global.pth"
+      A5: "bfs46/A5_dual_concat.pth"
+      A6: "bfs46/A6_dual_crossattn.pth"
+      A7: "bfs46/A7_proposed.pth"
+
+    pca11:
+      convnextv2_tiny: "pca11/convnextv2_tiny.pth"
+      swinv2_tiny_window8_256: "pca11/swinv2_tiny.pth"
+      swinv2_base_window16_256: "pca11/swinv2_base.pth"
+      coatnet_0_rw_224: "pca11/coatnet_0.pth"
+      efficientnet_b0: "pca11/efficientnet_b0.pth"
+      densenet121: "pca11/densenet121.pth"
+
+      A1: "pca11/A1_local_only.pth"
+      A2: "pca11/A2_global_only.pth"
+      A3: "pca11/A3_seq_concat.pth"
+      A4: "pca11/A4_seq_local_to_global.pth"
+      A5: "pca11/A5_dual_concat.pth"
+      A6: "pca11/A6_dual_crossattn.pth"
+      A7: "pca11/A7_proposed.pth"
+
+    wrd21:
+      convnextv2_tiny: "wrd21/convnextv2_tiny.pth"
+      swinv2_tiny_window8_256: "wrd21/swinv2_tiny.pth"
+      swinv2_base_window16_256: "wrd21/swinv2_base.pth"
+      coatnet_0_rw_224: "wrd21/coatnet_0.pth"
+      efficientnet_b0: "wrd21/efficientnet_b0.pth"
+      densenet121: "wrd21/densenet121.pth"
+
+      A1: "wrd21/A1_local_only.pth"
+      A2: "wrd21/A2_global_only.pth"
+      A3: "wrd21/A3_seq_concat.pth"
+      A4: "wrd21/A4_seq_local_to_global.pth"
+      A5: "wrd21/A5_dual_concat.pth"
+      A6: "wrd21/A6_dual_crossattn.pth"
+      A7: "wrd21/A7_proposed.pth"
+
+    vn26:
+      convnextv2_tiny: "vn26/convnextv2_tiny.pth"
+      swinv2_tiny_window8_256: "vn26/swinv2_tiny.pth"
+      swinv2_base_window16_256: "vn26/swinv2_base.pth"
+      coatnet_0_rw_224: "vn26/coatnet_0.pth"
+      efficientnet_b0: "vn26/efficientnet_b0.pth"
+      densenet121: "vn26/densenet121.pth"
+
+      A1: "vn26/A1_local_only.pth"
+      A2: "vn26/A2_global_only.pth"
+      A3: "vn26/A3_seq_concat.pth"
+      A4: "vn26/A4_seq_local_to_global.pth"
+      A5: "vn26/A5_dual_concat.pth"
+      A6: "vn26/A6_dual_crossattn.pth"
+      A7: "vn26/A7_proposed.pth"
+
+    vn99:
+      convnextv2_tiny: "vn99/convnextv2_tiny.pth"
+      swinv2_tiny_window8_256: "vn99/swinv2_tiny.pth"
+      swinv2_base_window16_256: "vn99/swinv2_base.pth"
+      coatnet_0_rw_224: "vn99/coatnet_0.pth"
+      efficientnet_b0: "vn99/efficientnet_b0.pth"
+      densenet121: "vn99/densenet121.pth"
+
+      A1: "vn99/A1_local_only.pth"
+      A2: "vn99/A2_global_only.pth"
+      A3: "vn99/A3_seq_concat.pth"
+      A4: "vn99/A4_seq_local_to_global.pth"
+      A5: "vn99/A5_dual_concat.pth"
+      A6: "vn99/A6_dual_crossattn.pth"
+      A7: "vn99/A7_proposed.pth"
+
