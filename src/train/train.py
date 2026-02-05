@@ -1,6 +1,8 @@
 import os
 import gc
 import csv
+import random
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -31,7 +33,7 @@ def set_seed(seed: int):
     torch.backends.cudnn.benchmark = False
 
 # -------------------------------------------------
-# Transforms (GIỮ NGUYÊN LOGIC CỦA BẠN)
+# Transforms
 # -------------------------------------------------
 def get_transforms_for_model(model_name):
     if model_name == 'coatnet_0_rw_224':
@@ -105,15 +107,21 @@ def main():
         dataset_path = os.path.join(processed_root, dataset_name)
         print(f"\n==================== Dataset: {dataset_name} ====================")
 
+        # --- UPDATED PATHS ---
         train_dir = os.path.join(dataset_path, "train")
-        val_dir = os.path.join(dataset_path, "test")
+        val_dir = os.path.join(dataset_path, "val")
+        test_dir = os.path.join(dataset_path, "test")
+
+        if not (os.path.exists(train_dir) and os.path.exists(val_dir) and os.path.exists(test_dir)):
+            print(f"⚠️ Missing split folders for {dataset_name}. Skipping.")
+            continue
 
         for model_name in get_models(cfg):
-
             train_transform, val_transform = get_transforms_for_model(model_name)
 
             train_ds = datasets.ImageFolder(train_dir, transform=train_transform)
             val_ds = datasets.ImageFolder(val_dir, transform=val_transform)
+            test_ds = datasets.ImageFolder(test_dir, transform=val_transform)
 
             num_classes = len(train_ds.classes)
             print("Classes:", num_classes)
@@ -122,23 +130,21 @@ def main():
             batch_size = train_cfg["batch_size"]
             lr = train_cfg["lr"]
 
-            for use_mix in [False]:  # giữ đúng logic bạn đang dùng
+            for use_mix in [False, True]:
                 tag = "mixup" if use_mix else "nomix"
                 print(f"\n🚀 Training {model_name} | {tag}")
 
                 train_loader = DataLoader(
-                    train_ds,
-                    batch_size=batch_size,
-                    shuffle=True,
-                    num_workers=n_cores,
-                    pin_memory=True
+                    train_ds, batch_size=batch_size, shuffle=True,
+                    num_workers=n_cores, pin_memory=True
                 )
                 val_loader = DataLoader(
-                    val_ds,
-                    batch_size=batch_size,
-                    shuffle=False,
-                    num_workers=n_cores,
-                    pin_memory=True
+                    val_ds, batch_size=batch_size, shuffle=False,
+                    num_workers=n_cores, pin_memory=True
+                )
+                test_loader = DataLoader(
+                    test_ds, batch_size=batch_size, shuffle=False,
+                    num_workers=n_cores, pin_memory=True
                 )
 
                 model = build_model(model_name, cfg, num_classes).to(DEVICE)
@@ -146,12 +152,8 @@ def main():
                 mixup_fn = None
                 if use_mix:
                     mixup_fn = Mixup(
-                        mixup_alpha=0.8,
-                        cutmix_alpha=1.0,
-                        prob=0.8,
-                        switch_prob=0.5,
-                        label_smoothing=0.1,
-                        num_classes=num_classes
+                        mixup_alpha=0.8, cutmix_alpha=1.0, prob=0.8,
+                        switch_prob=0.5, label_smoothing=0.1, num_classes=num_classes
                     )
 
                 optimizer = optim.AdamW(model.parameters(), lr=lr)
@@ -171,7 +173,7 @@ def main():
 
                 for epoch in range(NUM_EPOCHS):
 
-                    # Warmup
+                    # Warmup Logic
                     if epoch < WARMUP_EPOCHS:
                         warmup_lr = lr * (epoch + 1) / WARMUP_EPOCHS
                         for g in optimizer.param_groups:
@@ -183,15 +185,18 @@ def main():
 
                     print(f"\nEpoch {epoch+1}/{NUM_EPOCHS} | LR={lr_now:.6f}")
 
+                    # Train
                     tl, ta = train_one_epoch(
                         model, train_loader, optimizer,
                         criterion, scaler, mixup_fn, DEVICE
                     )
+                    
+                    # Validate 
                     vl, va = validate(model, val_loader, criterion, DEVICE)
 
                     print(f"TrainAcc={ta:.4f} | ValAcc={va:.4f}")
 
-                    # ----- EARLY STOP AFTER WARMUP -----
+                    # Save Best & Early Stopping dựa trên Val Accuracy
                     if epoch < WARMUP_EPOCHS:
                         if va > best_acc:
                             best_acc = va
@@ -208,17 +213,18 @@ def main():
                             print("⛔ Early stopping triggered.")
                             break
 
-                print("🔥 Reloading best model...")
+                # --- FINAL EVALUATION ON TEST SET ---
+                print("🔥 Reloading best model for TEST evaluation...")
                 model.load_state_dict(torch.load(best_path))
 
-                acc, prec, rec, f1 = compute_metrics(model, val_loader, DEVICE)
-                print(f"FINAL METRICS: Acc={acc:.4f}, Precision={prec:.4f}, Recall={rec:.4f}, F1={f1:.4f}")
+                acc, prec, rec, f1 = compute_metrics(model, test_loader, DEVICE)
+                print(f"FINAL TEST METRICS: Acc={acc:.4f}, Precision={prec:.4f}, Recall={rec:.4f}, F1={f1:.4f}")
 
                 with open(csv_path, "a", newline="") as f:
                     writer = csv.writer(f)
                     writer.writerow([dataset_name, model_name, tag, acc, prec, rec, f1])
 
-                del model, optimizer, scaler, criterion, scheduler, train_loader, val_loader
+                del model, optimizer, scaler, criterion, scheduler, train_loader, val_loader, test_loader
                 gc.collect()
                 torch.cuda.empty_cache()
 

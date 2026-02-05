@@ -17,10 +17,14 @@ def count_from_split_map(csv_path):
     """
     Count images per species from split_map CSV
     """
+    if not os.path.exists(csv_path):
+        return Counter(), 0
+
     df = pd.read_csv(csv_path)
     species_counter = Counter()
 
     for path in df["new_path"]:
+        # Assumes path structure like: split/species/filename.jpg
         parts = path.split(os.sep)
         if len(parts) >= 2:
             species = parts[-2]
@@ -49,23 +53,28 @@ def main():
         print(f"\nProcessing dataset: {dataset_name}")
 
         train_csv = os.path.join(splits_root, f"{dataset_name}_train_split_map.csv")
+        val_csv = os.path.join(splits_root, f"{dataset_name}_val_split_map.csv")
         test_csv = os.path.join(splits_root, f"{dataset_name}_test_split_map.csv")
 
-        if not os.path.exists(train_csv) or not os.path.exists(test_csv):
-            print(f"⚠️ Split files not found for {dataset_name}, skipping.")
+        # Check for essential files (at least train should exist usually, but we check all)
+        if not os.path.exists(train_csv):
+            print(f"⚠️ Train split file not found for {dataset_name}, skipping.")
             continue
 
         train_counter, train_total = count_from_split_map(train_csv)
+        val_counter, val_total = count_from_split_map(val_csv)
         test_counter, test_total = count_from_split_map(test_csv)
 
-        all_species = set(train_counter.keys()) | set(test_counter.keys())
+        all_species = set(train_counter.keys()) | set(val_counter.keys()) | set(test_counter.keys())
 
         dataset_stats = {
             "num_classes": len(all_species),
             "num_train_images": train_total,
+            "num_val_images": val_total,
             "num_test_images": test_total,
-            "total_images": train_total + test_total,
+            "total_images": train_total + val_total + test_total,
             "train_per_class": dict(train_counter),
+            "val_per_class": dict(val_counter),
             "test_per_class": dict(test_counter),
         }
 
@@ -73,7 +82,8 @@ def main():
 
         print(f"  Classes: {dataset_stats['num_classes']}")
         print(f"  Train images: {train_total}")
-        print(f"  Test images: {test_total}")
+        print(f"  Val images:   {val_total}")
+        print(f"  Test images:  {test_total}")
         print(f"  Total images: {dataset_stats['total_images']}")
 
     # Save statistics

@@ -1,4 +1,3 @@
-# src/evaluation/evaluate.py
 import os
 import json
 import torch
@@ -29,7 +28,11 @@ from src.utils.model_loader import get_working_model
 # -------------------------------------------------
 # Transforms
 # -------------------------------------------------
-def get_val_transform(model_name):
+def get_eval_transform(model_name):
+    """
+    Standard transform for evaluation (no augmentation)
+    Used for Train (eval mode), Val, and Test
+    """
     if model_name == "coatnet_0_rw_224":
         img_size = 224
     else:
@@ -50,7 +53,7 @@ def get_val_transform(model_name):
 # Evaluate one model
 # -------------------------------------------------
 @torch.no_grad()
-def evaluate_model(model, loader, device):
+def evaluate_model(model, loader, device, desc="Evaluating"):
     model.eval()
 
     all_preds = []
@@ -90,6 +93,8 @@ def main():
 
     DEVICE = cfg["device"]
     num_workers = cfg["num_workers"]
+    # Usually eval batch size can be larger than train
+    batch_size = 32 
 
     processed_root = dataset_cfg["processed_root"]
 
@@ -104,16 +109,14 @@ def main():
 
     summary_results = {}
 
-    for dataset_name in get_datasets(cfg):
-        print(f"\n=== Evaluating dataset: {dataset_name} ===")
+    # Define splits to evaluate
+    TARGET_SPLITS = ["train", "val", "test"]
 
-        test_dir = os.path.join(processed_root, dataset_name, "test")
-        if not os.path.exists(test_dir):
-            print(f"⚠️ Test directory not found: {test_dir}, skipping.")
-            continue
+    for dataset_name in get_datasets(cfg):
+        print(f"\n==================== Evaluating Dataset: {dataset_name} ====================")
 
         if dataset_name not in weight_map:
-            print(f"⚠️ No pretrained weights defined for {dataset_name}")
+            print(f"⚠️ No pretrained weights defined for {dataset_name} in config.")
             continue
 
         summary_results[dataset_name] = {}
@@ -122,48 +125,95 @@ def main():
             print(f"\n--- Model: {model_name} ---")
 
             if model_name not in weight_map[dataset_name]:
-                print(f"⚠️ No weight for {dataset_name} - {model_name}")
+                print(f"⚠️ No weight map found for {dataset_name} -> {model_name}")
                 continue
 
             ckpt_path = os.path.join(weight_root, weight_map[dataset_name][model_name])
 
-            if not os.path.exists(ckpt_path):
-                print(f"⚠️ Weight file not found: {ckpt_path}")
+            # Determine classes from test set (assuming consistent classes across splits)
+            # We need to instantiate at least one dataset to get class names/count
+            dummy_path = os.path.join(processed_root, dataset_name, "test")
+            if not os.path.exists(dummy_path):
+                # Fallback to val or train if test missing
+                dummy_path = os.path.join(processed_root, dataset_name, "train")
+            
+            try:
+                temp_ds = datasets.ImageFolder(dummy_path)
+                class_names = temp_ds.classes
+                num_classes = len(class_names)
+            except Exception as e:
+                print(f"❌ Could not determine classes for {dataset_name}: {e}")
                 continue
 
-            val_transform = get_val_transform(model_name)
-
-            test_dataset = datasets.ImageFolder(test_dir, transform=val_transform)
-            test_loader = DataLoader(
-                test_dataset,
-                batch_size=32,
-                shuffle=False,
-                num_workers=num_workers,
-                pin_memory=True
-            )
-
-            num_classes = len(test_dataset.classes)
-
-            # ---- SMART LOAD MODEL ----
+            # ---- SMART LOAD MODEL (Load once per model) ----
             model = get_working_model(
                 model_name, cfg, num_classes, ckpt_path, DEVICE
             )
 
             if model is None:
-                print(f"❌ Skip {model_name}")
+                print(f"❌ Failed to load model {model_name}, skipping.")
                 continue
 
-            acc, prec, rec, f1, cm = evaluate_model(model, test_loader, DEVICE)
+            summary_results[dataset_name][model_name] = {}
+            
+            # Use same transform for all splits during evaluation
+            eval_transform = get_eval_transform(model_name)
 
-            print(f"Acc={acc:.4f}, Precision={prec:.4f}, Recall={rec:.4f}, F1={f1:.4f}")
+            # ---- LOOP THROUGH SPLITS (Train, Val, Test) ----
+            for split in TARGET_SPLITS:
+                split_dir = os.path.join(processed_root, dataset_name, split)
+                
+                if not os.path.exists(split_dir):
+                    print(f"⚠️ Split directory not found: {split_dir}. Skipping {split}.")
+                    continue
 
-            summary_results[dataset_name][model_name] = {
-                "weight_path": weight_map[dataset_name][model_name],
-                "accuracy": float(acc),
-                "precision": float(prec),
-                "recall": float(rec),
-                "f1": float(f1),
-            }
+                print(f"   > Running evaluation on [{split}] set...")
 
-            # ---- Confusion Matrix ----
-            fig, ax = pl
+                ds = datasets.ImageFolder(split_dir, transform=eval_transform)
+                loader = DataLoader(
+                    ds,
+                    batch_size=batch_size,
+                    shuffle=False,
+                    num_workers=num_workers,
+                    pin_memory=True
+                )
+
+                acc, prec, rec, f1, cm = evaluate_model(model, loader, DEVICE, desc=split)
+
+                print(f"     [{split.upper()}] Acc={acc:.4f}, F1={f1:.4f}")
+
+                # Save metrics to dict
+                summary_results[dataset_name][model_name][split] = {
+                    "accuracy": float(acc),
+                    "precision": float(prec),
+                    "recall": float(rec),
+                    "f1": float(f1),
+                }
+
+                # ---- Plot & Save Confusion Matrix ----
+                # Create a specific folder for plots if needed, or put in eval_dir
+                # Naming: {dataset}_{model}_{split}_cm.png
+                
+                fig, ax = plt.subplots(figsize=(10, 10))
+                disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
+                
+                # Rotate labels if there are many classes
+                disp.plot(cmap="Blues", ax=ax, xticks_rotation='vertical')
+                
+                plt.title(f"CM: {dataset_name} - {model_name} ({split})")
+                plt.tight_layout()
+                
+                save_name = f"{dataset_name}_{model_name}_{split}_cm.png"
+                plt.savefig(os.path.join(eval_dir, save_name))
+                plt.close(fig) # Close plot to free memory
+
+    # Save all summary results to JSON
+    json_path = os.path.join(eval_dir, "evaluation_summary.json")
+    with open(json_path, "w") as f:
+        json.dump(summary_results, f, indent=4)
+
+    print(f"\n✅ Evaluation completed. Results saved to {eval_dir}")
+
+
+if __name__ == "__main__":
+    main()

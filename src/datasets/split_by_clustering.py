@@ -114,52 +114,68 @@ def run_clustering_pipeline(image_paths, model, transform, batch_size, num_worke
 # -----------------------------
 # Split helpers
 # -----------------------------
-def split_clusters_stratified(cluster_map, train_ratio):
-    target_train = int(sum(len(v) for v in cluster_map.values()) * train_ratio)
-    current = 0
+def split_clusters_stratified(cluster_map, train_ratio, val_ratio):
+    total_imgs = sum(len(v) for v in cluster_map.values())
+    target_train = int(total_imgs * train_ratio)
+    target_val = int(total_imgs * val_ratio)
+    
+    current_train = 0
+    current_val = 0
+    
     train_clusters = set()
+    val_clusters = set()
     test_clusters = set()
 
     items = list(cluster_map.items())
     random.shuffle(items)
 
     for cid, imgs in items:
-        if current < target_train:
+        n_imgs = len(imgs)
+        # Fill Train first
+        if current_train < target_train:
             train_clusters.add(cid)
-            current += len(imgs)
+            current_train += n_imgs
+        # Then Fill Val
+        elif current_val < target_val:
+            val_clusters.add(cid)
+            current_val += n_imgs
+        # Rest goes to Test
         else:
             test_clusters.add(cid)
 
-    return train_clusters, test_clusters
+    return train_clusters, val_clusters, test_clusters
 
 
-def random_split_populator(image_paths, train_ratio, original_structure,
-                           train_list, test_list, dataset_root, filename_prefix=""):
+def random_split_populator(image_paths, train_ratio, val_ratio, original_structure,
+                           train_list, val_list, test_list, dataset_root, filename_prefix=""):
     random.shuffle(image_paths)
-    split_idx = int(len(image_paths) * train_ratio)
+    n_total = len(image_paths)
+    
+    idx_train = int(n_total * train_ratio)
+    # idx_val is cumulative: train_ratio + val_ratio
+    idx_val = int(n_total * (train_ratio + val_ratio))
 
-    if len(image_paths) > 1:
-        if split_idx == 0:
-            split_idx = 1
-        if split_idx == len(image_paths):
-            split_idx -= 1
+    # Basic safety for very small datasets
+    if n_total > 1:
+        if idx_train == 0: idx_train = 1
+        if idx_val <= idx_train and n_total > idx_train: idx_val = idx_train + 1
+    
+    train_paths = image_paths[:idx_train]
+    val_paths = image_paths[idx_train:idx_val]
+    test_paths = image_paths[idx_val:]
 
-    train_paths = image_paths[:split_idx]
-    test_paths = image_paths[split_idx:]
+    def add_to_list(paths, target_list, split_name):
+        for path in paths:
+            if path not in original_structure: continue
+            _, species = original_structure[path]
+            filename = os.path.basename(path)
+            filename = f"{filename_prefix}_{filename}" if filename_prefix else filename
+            new_path = os.path.join(split_name, species, filename)
+            target_list.append({"old_path": path, "new_path": new_path})
 
-    for path in train_paths:
-        _, species = original_structure[path]
-        filename = os.path.basename(path)
-        filename = f"{filename_prefix}_{filename}" if filename_prefix else filename
-        new_path = os.path.join("train", species, filename)
-        train_list.append({"old_path": path, "new_path": new_path})
-
-    for path in test_paths:
-        _, species = original_structure[path]
-        filename = os.path.basename(path)
-        filename = f"{filename_prefix}_{filename}" if filename_prefix else filename
-        new_path = os.path.join("test", species, filename)
-        test_list.append({"old_path": path, "new_path": new_path})
+    add_to_list(train_paths, train_list, "train")
+    add_to_list(val_paths, val_list, "val")
+    add_to_list(test_paths, test_list, "test")
 
 
 def populate_data_lists(cluster_map, cluster_set, split_name,
@@ -188,9 +204,14 @@ def process_dataset_standard(dataset_root, model, transform, cfg, device, num_wo
     split_cfg = cfg["dataset_cfg"]["split"]
     cluster_cfg = cfg["dataset_cfg"]["clustering"]
 
-    train_ratio = split_cfg["train_ratio"]
-    min_images = split_cfg["min_images_for_clustering"]
-    min_test_ratio = split_cfg["min_test_ratio_from_cluster"]
+    # Hardcoded ratios as requested: 70% Train, 15% Val, 15% Test
+    train_ratio = split_cfg.get("train_ratio", 0.7)
+    val_ratio = split_cfg.get("val_ratio", 0.15)
+    # test_ratio is implicit (remaining)
+    
+    min_images = split_cfg.get("min_images_for_clustering", 10)
+    # Check logic: if val+test is too small, fallback to random
+    min_test_ratio = split_cfg.get("min_test_ratio_from_cluster", 0.25) 
     batch_size = cluster_cfg["batch_size"]
 
     species_to_paths = defaultdict(list)
@@ -200,46 +221,54 @@ def process_dataset_standard(dataset_root, model, transform, cfg, device, num_wo
         split_dir = os.path.join(dataset_root, split)
         if not os.path.isdir(split_dir):
             continue
-        dataset = datasets.ImageFolder(split_dir)
-        for path, _ in dataset.imgs:
-            species = os.path.basename(os.path.dirname(path))
-            species_to_paths[species].append(path)
-            original_structure[path] = (split, species)
+        try:
+            dataset = datasets.ImageFolder(split_dir)
+            for path, _ in dataset.imgs:
+                species = os.path.basename(os.path.dirname(path))
+                species_to_paths[species].append(path)
+                original_structure[path] = (split, species)
+        except:
+            continue
 
-    all_train, all_test = [], []
+    all_train, all_val, all_test = [], [], []
 
     for species, image_paths in species_to_paths.items():
         print(f"  Species: {species} ({len(image_paths)} images)")
 
+        # Case 1: Too few images -> Random Split
         if len(image_paths) < min_images:
-            random_split_populator(image_paths, train_ratio,
-                                    original_structure, all_train, all_test, dataset_root)
+            random_split_populator(image_paths, train_ratio, val_ratio,
+                                    original_structure, all_train, all_val, all_test, dataset_root)
             continue
 
+        # Case 2: Clustering
         cluster_map, n_clusters = run_clustering_pipeline(
             image_paths, model, transform,
             batch_size, num_workers, device, cluster_cfg)
 
         if n_clusters <= 1:
-            random_split_populator(image_paths, train_ratio,
-                                    original_structure, all_train, all_test, dataset_root)
+            random_split_populator(image_paths, train_ratio, val_ratio,
+                                    original_structure, all_train, all_val, all_test, dataset_root)
             continue
 
-        train_clusters, test_clusters = split_clusters_stratified(cluster_map, train_ratio)
+        train_clusters, val_clusters, test_clusters = split_clusters_stratified(cluster_map, train_ratio, val_ratio)
 
-        num_test_images = sum(len(cluster_map[c]) for c in test_clusters)
-        min_required = int(len(image_paths) * min_test_ratio)
+        # Check if split was effective (e.g. ensure we didn't put everything in train)
+        num_val_test_images = sum(len(cluster_map[c]) for c in val_clusters) + sum(len(cluster_map[c]) for c in test_clusters)
+        min_required = int(len(image_paths) * min_test_ratio) # reusing config parameter name logic
 
-        if num_test_images < min_required:
-            random_split_populator(image_paths, train_ratio,
-                                    original_structure, all_train, all_test, dataset_root)
+        if num_val_test_images < min_required:
+            random_split_populator(image_paths, train_ratio, val_ratio,
+                                    original_structure, all_train, all_val, all_test, dataset_root)
         else:
             populate_data_lists(cluster_map, train_clusters, "train",
                                  dataset_root, original_structure, all_train)
+            populate_data_lists(cluster_map, val_clusters, "val",
+                                 dataset_root, original_structure, all_val)
             populate_data_lists(cluster_map, test_clusters, "test",
                                  dataset_root, original_structure, all_test)
 
-    return all_train, all_test
+    return all_train, all_val, all_test
 
 
 # -----------------------------
@@ -250,9 +279,11 @@ def process_dataset_vn26(dataset_root, model, transform, cfg, device, num_worker
     cluster_cfg = cfg["dataset_cfg"]["clustering"]
     vn26_cfg = cfg["dataset_cfg"]["vn26"]
 
-    train_ratio = split_cfg["train_ratio"]
-    min_images = split_cfg["min_images_for_clustering"]
-    min_test_ratio = split_cfg["min_test_ratio_from_cluster"]
+    train_ratio = 0.70
+    val_ratio = 0.15
+    
+    min_images = split_cfg.get("min_images_for_clustering", 10)
+    min_test_ratio = split_cfg.get("min_test_ratio_from_cluster", 0.25)
     batch_size = cluster_cfg["batch_size"]
 
     species_mag_to_paths = defaultdict(lambda: defaultdict(list))
@@ -262,17 +293,27 @@ def process_dataset_vn26(dataset_root, model, transform, cfg, device, num_worker
         split_dir = os.path.join(dataset_root, split)
         if not os.path.isdir(split_dir):
             continue
-        dataset = datasets.ImageFolder(split_dir)
-        for path, _ in dataset.imgs:
-            species = os.path.basename(os.path.dirname(path))
-            filename = os.path.basename(path)
+        try:
+            dataset = datasets.ImageFolder(split_dir)
+            for path, _ in dataset.imgs:
+                species = os.path.basename(os.path.dirname(path))
+                filename = os.path.basename(path)
 
-            for mag in vn26_cfg["magnifications"]:
-                if filename.startswith(f"{mag}_"):
-                    species_mag_to_paths[species][mag].append(path)
-                    original_structure[path] = (split, species)
+                # Match logic for VN26 magnifications
+                matched = False
+                for mag in vn26_cfg["magnifications"]:
+                    if filename.startswith(f"{mag}_"):
+                        species_mag_to_paths[species][mag].append(path)
+                        original_structure[path] = (split, species)
+                        matched = True
+                        break
+                if not matched:
+                    # Fallback or ignore if not matching mag pattern
+                    pass
+        except:
+            continue
 
-    all_train, all_test = [], []
+    all_train, all_val, all_test = [], [], []
 
     for species, mag_map in species_mag_to_paths.items():
         print(f"Species: {species}")
@@ -280,8 +321,8 @@ def process_dataset_vn26(dataset_root, model, transform, cfg, device, num_worker
             print(f"  Mag {mag}: {len(image_paths)} images")
 
             if len(image_paths) < min_images:
-                random_split_populator(image_paths, train_ratio,
-                                        original_structure, all_train, all_test, dataset_root)
+                random_split_populator(image_paths, train_ratio, val_ratio,
+                                        original_structure, all_train, all_val, all_test, dataset_root)
                 continue
 
             cluster_map, n_clusters = run_clustering_pipeline(
@@ -289,31 +330,33 @@ def process_dataset_vn26(dataset_root, model, transform, cfg, device, num_worker
                 batch_size, num_workers, device, cluster_cfg)
 
             if n_clusters <= 1:
-                random_split_populator(image_paths, train_ratio,
-                                        original_structure, all_train, all_test, dataset_root)
+                random_split_populator(image_paths, train_ratio, val_ratio,
+                                        original_structure, all_train, all_val, all_test, dataset_root)
                 continue
 
-            train_clusters, test_clusters = split_clusters_stratified(cluster_map, train_ratio)
+            train_clusters, val_clusters, test_clusters = split_clusters_stratified(cluster_map, train_ratio, val_ratio)
 
-            num_test_images = sum(len(cluster_map[c]) for c in test_clusters)
+            num_val_test_images = sum(len(cluster_map[c]) for c in val_clusters) + sum(len(cluster_map[c]) for c in test_clusters)
             min_required = int(len(image_paths) * min_test_ratio)
 
-            if num_test_images < min_required:
-                random_split_populator(image_paths, train_ratio,
-                                        original_structure, all_train, all_test, dataset_root)
+            if num_val_test_images < min_required:
+                random_split_populator(image_paths, train_ratio, val_ratio,
+                                        original_structure, all_train, all_val, all_test, dataset_root)
             else:
                 populate_data_lists(cluster_map, train_clusters, "train",
                                      dataset_root, original_structure, all_train)
+                populate_data_lists(cluster_map, val_clusters, "val",
+                                     dataset_root, original_structure, all_val)
                 populate_data_lists(cluster_map, test_clusters, "test",
                                      dataset_root, original_structure, all_test)
 
-    return all_train, all_test
+    return all_train, all_val, all_test
 
 
 # -----------------------------
 # Copy data to processed folder
 # -----------------------------
-def copy_split_data(train_data, test_data, dataset_name, cfg):
+def copy_split_data(train_data, val_data, test_data, dataset_name, cfg):
     dataset_cfg = cfg["dataset_cfg"]
     processed_root = dataset_cfg["processed_root"]
     target_root = os.path.join(processed_root, dataset_name)
@@ -324,10 +367,10 @@ def copy_split_data(train_data, test_data, dataset_name, cfg):
 
     print(f"Copying files to processed folder: {target_root}")
 
-    def copy_records(records):
-        for record in tqdm(records, desc="Copying files"):
+    def copy_records(records, split_name):
+        for record in tqdm(records, desc=f"Copying {split_name}"):
             old_path = record["old_path"]
-            rel_path = record["new_path"]  # train/class/img.jpg
+            rel_path = record["new_path"]  # e.g., train/class/img.jpg
             new_path = os.path.join(target_root, rel_path)
 
             os.makedirs(os.path.dirname(new_path), exist_ok=True)
@@ -337,8 +380,9 @@ def copy_split_data(train_data, test_data, dataset_name, cfg):
             except Exception as e:
                 print(f"Error copying {old_path} -> {new_path}: {e}")
 
-    copy_records(train_data)
-    copy_records(test_data)
+    copy_records(train_data, "train")
+    copy_records(val_data, "val")
+    copy_records(test_data, "test")
 
 
 # -----------------------------
@@ -379,23 +423,25 @@ def main():
         print(f"\nProcessing dataset: {dataset_name}")
 
         if dataset_name.lower() == "vn26":
-            train_data, test_data = process_dataset_vn26(
+            train_data, val_data, test_data = process_dataset_vn26(
                 dataset_root, model, transform, cfg, device, num_workers
             )
         else:
-            train_data, test_data = process_dataset_standard(
+            train_data, val_data, test_data = process_dataset_standard(
                 dataset_root, model, transform, cfg, device, num_workers
             )
 
         train_csv = os.path.join(splits_root, f"{dataset_name}_train_split_map.csv")
+        val_csv = os.path.join(splits_root, f"{dataset_name}_val_split_map.csv")
         test_csv = os.path.join(splits_root, f"{dataset_name}_test_split_map.csv")
 
         pd.DataFrame(train_data).to_csv(train_csv, index=False)
+        pd.DataFrame(val_data).to_csv(val_csv, index=False)
         pd.DataFrame(test_data).to_csv(test_csv, index=False)
 
         print(f"Saved split maps for {dataset_name}")
 
-        copy_split_data(train_data, test_data, dataset_name, cfg)
+        copy_split_data(train_data, val_data, test_data, dataset_name, cfg)
 
         gc.collect()
         torch.cuda.empty_cache()
