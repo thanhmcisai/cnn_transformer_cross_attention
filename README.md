@@ -98,6 +98,7 @@ Each dataset is automatically:
 ```
 
 processed/{dataset}/train/{class_name}/
+processed/{dataset}/val/{class_name}/
 processed/{dataset}/test/{class_name}/
 
 ```
