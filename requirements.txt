@@ -32,6 +32,10 @@ gdown>=4.7.1
 # Mixed precision
 accelerate>=0.25.0
 
+# Complexity / optional CPU deployment benchmarks
+thop>=0.1.1
+onnxruntime>=1.16.0
+
 # Jupyter (optional, for notebooks)
 jupyter>=1.0.0
 notebook>=7.0.0

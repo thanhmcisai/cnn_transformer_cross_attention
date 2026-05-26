@@ -8,15 +8,46 @@ datasets:
   - vn26
   - vn99
 
+model_order:
+  - A1_CNN
+  - A2_Transformer
+  - A3_Seq_Concat
+  - A4_Seq_Single
+  - A5_Par_Concat
+  - A6_Par_CrossAttn
+  - WiT
+  - EfficientNet-B0
+  - DenseNet121
+  - CoAtNet-0
+  - MobileViT-S
+  - SwinV2-Base
+  - EfficientFormer-L1
+
 
 global_train:
   epochs: 100
   early_stop: 5
+  seeds: [42, 123, 456]
   warmup_epochs: 3
   optimizer: adamw
   scheduler: cosine
   precision: amp
   seed: 42
+  batch_size: 64
+  weight_decay: 0.05
+  mixup_alpha: 0.4
+  cutmix_alpha: 0.4
+  mixup_prob: 1.0
+  label_smoothing: 0.1
+  monitor: val_f1
+
+paths:
+  data_root: data/raw
+  processed_root: data/processed
+  splits_root: data/splits
+  features_dir: features
+  checkpoints_dir: checkpoints
+  results_dir: results
 
 
 models:
@@ -118,6 +149,174 @@ models:
     batch_size: 64
     lr: 3e-4
 
+  A1_CNN:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    batch_size: 64
+    lr: 3e-4
+    patience: 5
+
+  A2_Transformer:
+    type: proposed
+    global_backbone: swinv2_tiny_window8_256
+    batch_size: 64
+    lr: 2.5e-4
+    patience: 7
+    mixup_prob: 0.7
+
+  A3_Seq_Concat:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    embed_dim: 768
+    depth: 4
+    num_heads: 8
+    img_size: 256
+    batch_size: 64
+    lr: 2.5e-4
+    patience: 7
+
+  A4_Seq_Single:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    embed_dim: 768
+    depth: 4
+    num_heads: 8
+    img_size: 256
+    batch_size: 64
+    lr: 2.5e-4
+    patience: 7
+
+  A5_Par_Concat:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    global_backbone: swinv2_tiny_window8_256
+    embed_dim: 768
+    batch_size: 64
+    lr: 2e-4
+    patience: 7
+
+  A6_Par_CrossAttn:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    global_backbone: swinv2_tiny_window8_256
+    embed_dim: 768
+    depth: 4
+    num_heads: 8
+    batch_size: 64
+    lr: 2e-4
+    patience: 7
+
+  WiT:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    embed_dim: 768
+    depth: 4
+    num_heads: 8
+    query_direction: local
+    img_size: 256
+    batch_size: 64
+    lr: 1e-4
+    patience: 10
+    mixup_prob: 0.5
+
+  WiT_depth1:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    embed_dim: 768
+    depth: 1
+    num_heads: 8
+    query_direction: local
+    img_size: 256
+    batch_size: 64
+    lr: 1e-4
+    patience: 10
+    mixup_prob: 0.5
+
+  WiT_depth2:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    embed_dim: 768
+    depth: 2
+    num_heads: 8
+    query_direction: local
+    img_size: 256
+    batch_size: 64
+    lr: 1e-4
+    patience: 10
+    mixup_prob: 0.5
+
+  WiT_depth6:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    embed_dim: 768
+    depth: 6
+    num_heads: 8
+    query_direction: local
+    img_size: 256
+    batch_size: 64
+    lr: 1e-4
+    patience: 10
+    mixup_prob: 0.5
+
+  WiT_global_query:
+    type: proposed
+    local_backbone: convnextv2_tiny
+    embed_dim: 768
+    depth: 4
+    num_heads: 8
+    query_direction: global
+    img_size: 256
+    batch_size: 64
+    lr: 1e-4
+    patience: 10
+    mixup_prob: 0.5
+
+  EfficientNet-B0:
+    type: baseline
+    backbone: efficientnet_b0
+    batch_size: 128
+    lr: 3e-4
+    patience: 5
+
+  DenseNet121:
+    type: baseline
+    backbone: densenet121
+    batch_size: 128
+    lr: 4e-4
+    patience: 5
+
+  CoAtNet-0:
+    type: baseline
+    backbone: coatnet_0_rw_224
+    resize_to: 224
+    batch_size: 64
+    lr: 4e-4
+    patience: 7
+
+  MobileViT-S:
+    type: baseline
+    backbone: mobilevit_s
+    batch_size: 64
+    lr: 3e-4
+    patience: 7
+
+  SwinV2-Base:
+    type: baseline
+    backbone: swinv2_base_window16_256
+    batch_size: 32
+    lr: 2e-4
+    patience: 8
+    mixup_prob: 0.7
+
+  EfficientFormer-L1:
+    type: baseline
+    backbone: efficientformer_l1
+    resize_to: 224
+    batch_size: 64
+    lr: 2.5e-4
+    patience: 8
+    mixup_prob: 0.7
+
 
 weights:
   root_dir: "pretrained_weights"
@@ -217,4 +416,3 @@ weights:
       A5: "vn99/A5_dual_concat.pth"
       A6: "vn99/A6_dual_crossattn.pth"
       A7: "vn99/A7_proposed.pth"
-

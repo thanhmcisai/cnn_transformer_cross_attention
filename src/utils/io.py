@@ -71,8 +71,17 @@ def build_model_train_config(global_train_cfg: dict, model_cfg: dict) -> dict:
     """
     train_cfg = global_train_cfg.copy()
 
-    # Override with model-specific hyperparameters if provided
-    for key in ["batch_size", "lr"]:
+    # Override with model-specific hyperparameters if provided.
+    for key in [
+        "batch_size",
+        "lr",
+        "patience",
+        "mixup_prob",
+        "img_size",
+        "resize_to",
+        "weight_decay",
+        "label_smoothing",
+    ]:
         if key in model_cfg:
             train_cfg[key] = model_cfg[key]
 
@@ -136,8 +145,11 @@ def get_datasets(cfg: dict):
 
 
 def get_models(cfg: dict):
-    """Return dict of models from experiments.yaml."""
-    return cfg["experiments_cfg"]["models"]
+    """Return selected model names from experiments.yaml."""
+    exp_cfg = cfg["experiments_cfg"]
+    if "model_order" in exp_cfg:
+        return exp_cfg["model_order"]
+    return list(exp_cfg["models"].keys())
 
 
 def get_global_train_cfg(cfg: dict):
@@ -146,7 +158,7 @@ def get_global_train_cfg(cfg: dict):
 
 
 def get_model_cfg(cfg: dict, model_name: str):
-    models_cfg = get_models(cfg)
+    models_cfg = cfg["experiments_cfg"]["models"]
     if model_name not in models_cfg:
         raise ValueError(f"Model '{model_name}' not found in experiments.yaml")
     return models_cfg[model_name]

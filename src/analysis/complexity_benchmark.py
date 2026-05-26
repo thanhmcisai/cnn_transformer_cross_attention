@@ -23,7 +23,7 @@ def benchmark_model(model_name, cfg, device, num_classes=100):
 
     dummy_input = torch.randn(input_size).to(device)
 
-    model = build_model(model_name, cfg, num_classes).to(device)
+    model = build_model(model_name, cfg, num_classes, pretrained=False).to(device)
     model.eval()
 
     # --------------------
@@ -67,7 +67,7 @@ def benchmark_model(model_name, cfg, device, num_classes=100):
 
 def main():
     cfg = load_configs()
-    DEVICE = cfg["device"]
+    DEVICE = torch.device(cfg["device"])
 
     os.makedirs("results/analysis", exist_ok=True)
     save_path = "results/analysis/complexity_benchmark.csv"

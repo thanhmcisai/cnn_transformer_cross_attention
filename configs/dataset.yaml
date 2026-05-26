@@ -34,8 +34,9 @@ datasets:
 image_extensions: [".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"]
 
 split:
-  train_ratio: 0.7
+  train_ratio: 0.65
   val_ratio: 0.15
+  test_ratio: 0.20
   min_images_for_clustering: 10
   min_test_ratio_from_cluster: 0.25
 

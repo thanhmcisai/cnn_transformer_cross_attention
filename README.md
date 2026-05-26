@@ -1,512 +1,258 @@
-# CNN–Transformer Cross-Attention for Wood Species Recognition
+# WiT: Wood Species Identification with Query-Guided Cross-Attention
 
-This repository implements a complete experimental pipeline for the paper:
+This repository contains the experimental code for a wood species identification study using a hybrid CNN-Transformer architecture with query-guided cross-attention (QGCA). It is organized to support reproducible dataset splitting, multi-seed model training, evaluation, ablation studies, and supplementary analyses for manuscript submission.
 
-> **A CNN–Transformer Cross-Attention Network for Multiscale Wood Species Recognition**
+Supported datasets: BD11, BFS46, PCA11, WRD21, VN26, and VN99.
 
-The project integrates:
+## Overview
 
-- CNN-based local feature extraction
-- Transformer-based global feature modeling
-- Cross-attention fusion
-- Comprehensive experiments with baselines and ablation models (A1–A7)
+The proposed WiT model combines local anatomical representations from a CNN backbone with global contextual representations from a Transformer encoder. A query-guided cross-attention module fuses these representations before classification. The repository includes baseline models and controlled architectural variants to quantify the contribution of each component.
 
-It supports:
+The experimental pipeline provides:
 
-- Dataset preprocessing with clustering-based splitting
-- Training and evaluation
-- Visualization (loss, accuracy, confusion matrix, t-SNE/UMAP, attention maps)
+- Leakage-aware train/validation/test splitting based on feature clustering.
+- Multi-seed training with validation macro-F1 early stopping.
+- Baseline, ablation, and proposed-model comparisons.
+- Bootstrap confidence intervals for reported metrics.
+- Supplementary analyses for complexity, corruption robustness, cross-dataset transfer, and attention/token concentration.
 
----
+## Repository Structure
 
-## 📁 Project Structure
-
+```text
+configs/
+  dataset.yaml          Dataset paths and split settings
+  experiments.yaml      Model registry, training settings, and output paths
+src/
+  datasets/             Feature extraction, threshold analysis, CSV split creation
+  models/               Baseline, ablation, and WiT model definitions
+  train/                Multi-seed training entrypoint
+  evaluation/           Checkpoint evaluation on CSV splits
+  analysis/             Complexity, robustness, transfer, and attention metrics
+  visualization/        Confusion matrix, embedding, and attention-map utilities
 ```
 
-cnn_transformer_cross_attention/
-│
-├── configs/
-│ ├── dataset.yaml
-│ └── experiments.yaml
-│
-├── src/
-│ ├── datasets/
-│ │ ├── download.py
-│ │ ├── split_by_clustering.py
-│ │ └── data_statistics.py
-│ │
-│ ├── models/
-│ │ └── models.py
-│ │
-│ ├── train/
-│ │ ├── train.py
-│ │ └── engine.py
-│ │
-│ ├── evaluation/
-│ │ └── evaluate.py
-│ │
-│ ├── visualization/
-│ │ ├── plot_loss.py
-│ │ ├── plot_accuracy.py
-│ │ ├── confusion_matrix.py
-│ │ ├── tsne_umap.py
-│ │ └── attention_map.py
-│ │
-│ └── utils/
-│ │ └── io.py
-│
-├── data/
-│ ├── raw/
-│ ├── processed/
-│ ├── splits/
-│ └── stats/
-│
-├── results/
-│
-├── requirements.txt
-└── README.md
-
-```
-
----
-
-## 📊 Supported Datasets
-
-The pipeline supports the following datasets:
-
-- **BD11**
-- **BFS46**
-- **PCA11**
-- **WRD21**
-- **VN26**
-- **VN99**
-
-Dataset configuration is defined in:
-
-```
-
-configs/dataset.yaml
-
-```
-
-Each dataset is automatically:
-
-1. Downloaded (if public link is provided)
-2. Split using clustering-based strategy
-3. Organized into:
-
-```
-
-processed/{dataset}/train/{class_name}/
-processed/{dataset}/val/{class_name}/
-processed/{dataset}/test/{class_name}/
-
-```
-
----
-
-## ⚙️ Installation
-
-### 1. Clone repository
-
-```bash
-git clone https://github.com/yourname/cnn-transformer-cross-attention.git
-cd cnn-transformer-cross-attention
-```
-
-### 2. Create environment
-
-```bash
-conda create -n woodnet python=3.9
-conda activate woodnet
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-Install PyTorch with CUDA if available:
-
-```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-```
-
----
-
-## 🧪 Dataset Preprocessing
-
-### 1. Download datasets
-
-```bash
-python src/datasets/download.py
-```
-
-### 2. Clustering-based split
-
-```bash
-python src/datasets/split_by_clustering.py
-```
-
-This generates:
-
-```
-data/processed/{dataset}/train/
-data/processed/{dataset}/test/
-data/splits/{dataset}_train_split_map.csv
-data/splits/{dataset}_test_split_map.csv
-```
-
-### 3. Dataset statistics
-
-```bash
-python src/datasets/data_statistics.py
-```
-
-Statistics saved in:
-
-```
-data/stats/dataset_statistics.json
-```
-
----
-
-## 🏋️ Training
-
-Training is driven by:
-
-```
-configs/experiments.yaml
-```
-
-Run training:
-
-```bash
-python src/train/train.py
-```
-
-This will:
-
-- Train all baseline and proposed models
-- Save best checkpoint to:
-
-```
-results/{dataset}_{model}_nomix/best.pth
-```
-
-- Save training logs:
-
-```
-results/{dataset}_{model}_nomix_history.json
-```
-
----
-
-## 📈 Evaluation
-
-Run evaluation:
-
-```bash
-python src/evaluation/evaluate.py
-```
-
-This computes:
-
-- Accuracy
-- Precision
-- Recall
-- F1-score
-- Confusion matrix
-
-Outputs:
-
-```
-results/evaluation/evaluation_results.json
-results/evaluation/*_confusion_matrix.png
-```
-
----
-
-## 📊 Visualization
-
-### A. Loss & Accuracy curves
-
-```bash
-python src/visualization/plot_loss.py
-python src/visualization/plot_accuracy.py
-```
-
-Outputs:
-
-```
-results/plots/
-```
-
----
-
-### B. Confusion Matrix
-
-```bash
-python src/visualization/confusion_matrix.py
-```
-
-Outputs:
-
-```
-results/confusion_matrices/
-```
-
----
-
-### C. t-SNE / UMAP feature embedding
-
-```bash
-python src/visualization/tsne_umap.py
-```
-
-Outputs:
-
-```
-results/embedding/
-```
-
----
-
-### D. Attention Map (Grad-CAM)
-
-```bash
-python src/visualization/attention_map.py
-```
-
-Outputs:
-
-```
-results/attention/
-```
-
----
-
-## 🧠 Models
-
-### Baseline models
-
-- ConvNeXtV2
-- EfficientNet
-- DenseNet121
-- CoAtNet
-- Swin Transformer V2 (Tiny, Base)
-
-### Proposed models (A1–A7)
-
-- A1: Local CNN only
-- A2: Global Transformer only
-- A3–A4: Sequential fusion
-- A5: Dual-branch fusion
-- A6: Cross-attention fusion
-- A7: Final proposed network (multi-stage cross-attention)
-
----
-
-## 🔁 Reproducibility
-
-All experiments are controlled via:
-
-```
-configs/dataset.yaml
-configs/experiments.yaml
-```
-
-No hyperparameters are hardcoded in code files.
-
-Random seeds are fixed for reproducibility.
-
----
-
-## 📦 Using Pretrained Weights for Evaluation & Visualization
-
-This repository supports evaluation and visualization directly from **pretrained weights** without retraining models.
-
-All pretrained weights are defined in the configuration file:
-
-```
-configs/experiments.yaml
-```
-
----
-
-### 📁 Directory Structure for Pretrained Weights
-
-Please organize pretrained weights as follows:
-
-```
+Generated artifacts are excluded from version control:
+
+```text
+data/
+features/
+checkpoints/
+results/
 pretrained_weights/
-├── vn26/
-│   ├── swinv2_tiny_window8_256.pth
-│   ├── swinv2_base_window16_256.pth
-│   └── convnextv2_tiny.pth
-├── vn99/
-│   ├── swinv2_tiny_window8_256.pth
-│   └── densenet121.pth
-└── ...
 ```
 
----
+## Installation
 
-### ⚙️ Configuration in `experiments.yaml`
-
-Specify pretrained weights using the following format:
-
-```yaml
-weights:
-  root_dir: "pretrained_weights"
-  mapping:
-    vn26:
-      swinv2_tiny_window8_256: "vn26/swinv2_tiny_window8_256.pth"
-      swinv2_base_window16_256: "vn26/swinv2_base_window16_256.pth"
-      convnextv2_tiny: "vn26/convnextv2_tiny.pth"
-
-    vn99:
-      swinv2_tiny_window8_256: "vn99/swinv2_tiny_window8_256.pth"
-      densenet121: "vn99/densenet121.pth"
-```
-
-Each entry maps:
-
-```
-<dataset_name> → <model_name> → weight_file_path
-```
-
----
-
-### ▶️ Run Evaluation Using Pretrained Weights
-
-After placing pretrained weights and updating `experiments.yaml`, run:
+Use Python 3 explicitly. On some systems, `python` still points to Python 2.
 
 ```bash
-python src/evaluation/evaluate.py
+conda create -n wit-wood python=3.10
+conda activate wit-wood
+python3 -m pip install -r requirements.txt
 ```
 
-Outputs will be saved to:
+Install a PyTorch build matching your CUDA version if the default package is not suitable for your machine.
 
+## Data Layout
+
+Place each dataset under `data/raw/` using one of the following layouts:
+
+```text
+data/raw/{dataset}/{species}/{image}
 ```
+
+or:
+
+```text
+data/raw/{dataset}/{train,val,test}/{species}/{image}
+```
+
+Dataset names and paths are configured in `configs/dataset.yaml` and `configs/experiments.yaml`.
+
+## Reproducible Pipeline
+
+Run commands from the repository root.
+
+### 1. Feature Extraction
+
+```bash
+python3 -m src.datasets.extract_features
+```
+
+Output:
+
+```text
+features/{dataset}_features.npz
+```
+
+### 2. Threshold Analysis
+
+```bash
+python3 -m src.datasets.threshold_analysis
+```
+
+Outputs:
+
+```text
+results/threshold_analysis/threshold_analysis.csv
+results/threshold_analysis/threshold_analysis_species.csv
+```
+
+### 3. CSV Split Generation
+
+```bash
+python3 -m src.datasets.split_from_features --threshold 0.10
+```
+
+Outputs:
+
+```text
+data/raw/{dataset}/train.csv
+data/raw/{dataset}/val.csv
+data/raw/{dataset}/test.csv
+```
+
+### 4. Multi-Seed Training
+
+```bash
+python3 -m src.train.train_multiseed
+```
+
+The default model list and random seeds are defined in `configs/experiments.yaml`.
+
+Checkpoints:
+
+```text
+checkpoints/{dataset}_{model}_s{seed}.pt
+```
+
+Result tables:
+
+```text
+results/results_raw.csv
+results/results_summary.csv
+```
+
+Example subset run:
+
+```bash
+python3 -m src.train.train_multiseed \
+  --datasets pca11 \
+  --models A1_CNN A2_Transformer A6_Par_CrossAttn WiT \
+  --seeds 42
+```
+
+### 5. Evaluation
+
+```bash
+python3 -m src.evaluation.evaluate_csv --seed 42
+```
+
+Outputs are saved under:
+
+```text
 results/evaluation/
-├── evaluation_results.json
-└── *_confusion_matrix.png
 ```
 
----
+## Models
 
-### 📊 Visualization with Pretrained Weights
+The active model registry is defined in `configs/experiments.yaml`.
 
-All visualization scripts automatically load weights from `experiments.yaml`.
+Baselines:
 
-#### Confusion Matrix
+- EfficientNet-B0
+- DenseNet121
+- CoAtNet-0
+- MobileViT-S
+- SwinV2-Base
+
+Ablation and proposed models:
+
+- `A1_CNN`: CNN-only local feature baseline.
+- `A2_Transformer`: Transformer-only global feature baseline.
+- `A3_Seq_Concat`: sequential CNN-Transformer with concatenated pooling.
+- `A4_Seq_Single`: sequential CNN-Transformer with a single pooled representation.
+- `A5_Par_Concat`: parallel CNN/Transformer fusion by concatenation.
+- `A6_Par_CrossAttn`: parallel fusion with cross-attention.
+- `WiT`: proposed sequential CNN-Transformer model with QGCA fusion.
+
+## Supplementary Analyses
+
+Computational complexity:
 
 ```bash
-python src/visualization/confusion_matrix.py
+python3 -m src.analysis.complexity_benchmark
 ```
 
-Output:
-
-```
-results/visualization/confusion_matrix/
-```
-
----
-
-#### t-SNE / UMAP Embedding
+Deployment runtime, throughput, and optional ONNX CPU latency:
 
 ```bash
-python src/visualization/tsne_umap.py
+python3 -m src.analysis.runtime_benchmark --models A1_CNN A2_Transformer A6_Par_CrossAttn WiT
+python3 -m src.analysis.runtime_benchmark --models WiT --onnx
 ```
 
-Output:
-
-```
-results/visualization/embedding/
-```
-
----
-
-#### Attention Map (Grad-CAM)
+WiT architecture sensitivity:
 
 ```bash
-python src/visualization/attention_map.py
+python3 -m src.analysis.sensitivity_analysis \
+  --models WiT_depth1 WiT_depth2 WiT WiT_depth6 WiT_global_query
 ```
 
-Output:
+VN99 threshold sensitivity:
 
+```bash
+python3 -m src.datasets.vn99_threshold_sensitivity
 ```
-results/visualization/attention/
+
+Corruption robustness:
+
+```bash
+python3 -m src.analysis.corruption_robustness \
+  --models A1_CNN A2_Transformer A6_Par_CrossAttn WiT
 ```
 
----
+Cross-dataset transfer:
 
-### 🔁 Reproducibility
+```bash
+python3 -m src.analysis.feature_transfer_eval --models A1_CNN WiT --k-values 1 3 5 7
+```
 
-By using pretrained weights defined in `experiments.yaml`, all evaluation and visualization results are:
+Attention and token concentration metrics:
 
-- Fully reproducible
-- Independent of the training process
-- Consistent across different machines
+```bash
+python3 -m src.analysis.attention_metrics \
+  --models A1_CNN A2_Transformer WiT \
+  --limit-batches 10
+```
 
-No file paths are hardcoded in the codebase.
-All paths are managed through configuration files.
+## Reproducibility
 
----
+- Default seeds: `42`, `123`, and `456`.
+- Training monitor: validation macro-F1.
+- Model hyperparameters and output paths are configured in `configs/experiments.yaml`.
+- Summary tables report mean, standard deviation, and bootstrap 95% confidence intervals.
+- Data, checkpoints, and generated results are not committed to the repository.
 
-### ⚠️ Notes
+## Citation
 
-- Make sure the number of classes in the pretrained model matches the dataset.
-- Pretrained weights must be saved using:
-
-  ```python
-  torch.save(model.state_dict(), "model_name.pth")
-  ```
-
-- If a pretrained weight is missing, the script will automatically skip that model and display a warning.
-
----
-
-## 📜 Citation
-
-If you use this code in your research, please cite:
+If this repository supports your research, please cite the associated manuscript:
 
 ```bibtex
-@article{yourpaper2026woodnet,
-  title={A CNN–Transformer Cross-Attention Network for Multiscale Wood Species Recognition},
-  author={Your Name and Coauthors},
-  journal={IEEE Access},
-  year={2026}
+@article{macong2026witwood,
+  title   = {Wood Species Identification via a Hybrid CNN-Transformer with Query-Guided Cross-Attention},
+  author  = {Ma-Cong, Thanh and Coauthors},
+  journal = {IEEE Access},
+  year    = {2026}
 }
 ```
 
----
+## Contact
 
-## 📧 Contact
-
-For questions or collaboration:
-
-- Author: Thanh Ma-Cong
-- Email: [thanhmc.isai@gmail.com](mailto:thanhmc.isai@gmail.com)
+Thanh Ma-Cong  
+Email: thanhmc.isai@gmail.com
 
 ---
 
-## ⭐ Acknowledgments
+## License
 
-This project uses:
-
-- PyTorch
-- TIMM library
-- Scikit-learn
-- UMAP-learn
-
-We thank the authors of these tools and the dataset providers.
-
----
-
-## ⚠️ License
-
-This repository is released for research purposes only.
-Please respect dataset licenses when using the data.
+This repository is released for research use. Please follow the original dataset licenses and terms of use when using the data.
